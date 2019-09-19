@@ -1,0 +1,8 @@
+
+--index-url https://pypi.python.org/simple/
+
+xmltodict
+pandas
+urllib3
+pyspark
+pyarrow
