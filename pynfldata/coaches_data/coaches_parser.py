@@ -1,4 +1,4 @@
-from pynfldata.nfl_data_parser import functions as f
+from pynfldata.data_tools import functions as f
 import xmltodict
 import pandas as pd
 import logging
@@ -88,4 +88,3 @@ def get_coaches_data():
         save_coaches_df()
 
     return pd.read_csv(COACHES_FILENAME)
-
