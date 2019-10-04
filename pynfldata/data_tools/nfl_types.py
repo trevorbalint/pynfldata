@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import dataclasses as dc
 import xmltodict
-from pynfldata.nfl_data_parser import functions as f
+from pynfldata.data_tools import functions as f
 import logging
 
 # setup logging
