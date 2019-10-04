@@ -88,7 +88,8 @@ class Drive:
             self.scoring_team = scoring_team_list[0]
 
 
-def _process_play(play):  # DRY
+# Processes a "play" dict into a Play object
+def process_play_dict(play: dict):  # DRY
     return Play(int(play.get('@playId', None)),
                 play.get('@teamId', None),
                 play.get('playDescription', None),
@@ -101,17 +102,6 @@ def _process_play(play):  # DRY
                 play.get('@scoringType', None),
                 play.get('@scoringTeamId', None))
 
-
-def _get_drive_details(full_dict):
-    drives_dict = full_dict['drives']['drive']
-
-    drives_list = [Drive(int(float(x['@sequence'])),  # Python has some dumb bugs man
-                         x['@startTime'],
-                         x['@endTime'],
-                         [_process_play(y) for y in x['plays'].get('play')],
-                         x['@possessionTeamAbbr']) for x in drives_dict]
-
-    return drives_list
 
 # class to hold Game data. Has some fields meant to be input on init (from the NFL schedule XML)
 # and some fields added later (from boxscorePbP XML)
@@ -141,7 +131,7 @@ class Game:
         detected_plays = [(x.drive_id, y) for x in self.drives for y in x.plays]
 
         # The NFL JSON does include a full list of scoring plays separate from the drives object - get all plays here
-        scoring_plays = [_process_play(x) for x in full_dict['scoringPlays']['play']]
+        scoring_plays = [process_play_dict(x) for x in full_dict['scoringPlays']['play']]
         [x.calculate_points() for x in scoring_plays]
 
         # Get any scoring plays not found in Drives
@@ -159,6 +149,17 @@ class Game:
                 # recalculate drive's points
                 self.drives[max_drive_id - 1].calculate_scoring()
 
+    def _get_drive_details(self, full_dict):
+        drives_dict = full_dict['drives']['drive']
+
+        drives_list = [Drive(int(float(x['@sequence'])),  # Python has some dumb bugs man
+                             x['@startTime'],
+                             x['@endTime'],
+                             [process_play_dict(y) for y in x['plays'].get('play')],
+                             x['@possessionTeamAbbr']) for x in drives_dict]
+
+        self.drives = drives_list
+
     # given the game id, get boxscorePbP XML and populate Drives objects and all other Game fields
     def get_game_details(self):
         # Build URL, get XML, convert to dict, get out and store easy values
@@ -170,7 +171,7 @@ class Game:
         self.away_score = game_dict['score']['visitorTeamScore']['@pointTotal']
 
         # Extract the 'drives'/'drive' dict and all data from within it
-        self.drives = _get_drive_details(game_dict)
+        self._get_drive_details(game_dict)
         # Check to see if plays/drives score matches game final score. If not, fix.
         if not self.check_score_integrity():
             self._remedy_incorrect_scoreline(full_dict=game_dict)
