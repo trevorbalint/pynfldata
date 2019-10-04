@@ -1,6 +1,8 @@
 """File to get raw data from nfl.com and process drives out of it.
-Will likely be useful later when I need to get more data than just drive outcomes
+Will likely be useful but need to be refactored later when I need to get more data than just drive outcomes
 
+3-Oct-2019: Fixed issue with drive start position. Added "bad" games that are unprocessable. Removed arrow.
+    Added Game helper functions.
 4-Sep-2019: Mostly functional. A few small bugs that are noted, but most data is in and correct.
 """
 # todo better documentation
@@ -8,9 +10,8 @@ import xmltodict
 import dataclasses as dc
 from dataclasses import dataclass
 import logging
-import pyarrow as pa
-import pyarrow.parquet as pq
-from pynfldata import nfl_data_parser as f
+from pynfldata.nfl_data_parser import functions as f
+import pandas as pd
 
 # setup logging
 logger = logging.getLogger()
@@ -38,6 +39,7 @@ class Play:
     pos_team: str
     description: str
     yardline: Yardline
+    play_type: str
     scoring_type: str = None
     scoring_team_abbr: str = None
     points: int = 0
@@ -66,9 +68,12 @@ class Drive:
 
     # Function to calculate the starting yardline of a drive given the drive's plays
     # Complicated as some drives' first play has no yardline, hence the recursion
-    # fixme this often gets kickoff's yardline, not actual drive start yardline
     def calculate_drive_start(self, plays_list):
-        if plays_list[0].yardline is not None:
+        if len(plays_list) == 1:  # occurs when a game ends concurrent with a turnover/change of posession/kickoff
+            return Yardline(None, None, None)
+        elif plays_list[0].play_type == 'KICK_OFF':
+            return self.calculate_drive_start(plays_list[1:])
+        elif plays_list[0].yardline is not None:
             return plays_list[0].yardline
         else:
             logger.debug("Drive's first play has no yardline: {}".format(plays_list[0]))
@@ -82,6 +87,31 @@ class Drive:
                 logger.error("Different teams are listed as scoring in this drive! {}".format(scoring_team_list))
             self.scoring_team = scoring_team_list[0]
 
+
+def _process_play(play):  # DRY
+    return Play(int(play.get('@playId', None)),
+                play.get('@teamId', None),
+                play.get('playDescription', None),
+                Yardline(play.get('@yardlineSide'),
+                         play.get('@yardlineNumber'),
+                         (-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
+                                 50 - int(play['@yardlineNumber'])))
+                if play.get('@yardlineSide') else None,
+                play.get('@playType', None),
+                play.get('@scoringType', None),
+                play.get('@scoringTeamId', None))
+
+
+def _get_drive_details(full_dict):
+    drives_dict = full_dict['drives']['drive']
+
+    drives_list = [Drive(int(float(x['@sequence'])),  # Python has some dumb bugs man
+                         x['@startTime'],
+                         x['@endTime'],
+                         [_process_play(y) for y in x['plays'].get('play')],
+                         x['@possessionTeamAbbr']) for x in drives_dict]
+
+    return drives_list
 
 # class to hold Game data. Has some fields meant to be input on init (from the NFL schedule XML)
 # and some fields added later (from boxscorePbP XML)
@@ -105,6 +135,30 @@ class Game:
                     away_score=self.away_score, home_score=self.home_score)
         return str_rep
 
+    # The NFL data doesn't include conversion attempts after a fumble/pick-six
+    def _remedy_incorrect_scoreline(self, full_dict):
+        # To remedy this, first get a list of all detected plays in all drives
+        detected_plays = [(x.drive_id, y) for x in self.drives for y in x.plays]
+
+        # The NFL JSON does include a full list of scoring plays separate from the drives object - get all plays here
+        scoring_plays = [_process_play(x) for x in full_dict['scoringPlays']['play']]
+        [x.calculate_points() for x in scoring_plays]
+
+        # Get any scoring plays not found in Drives
+        undetected_plays = [x for x in scoring_plays if x not in [y[1] for y in detected_plays]]
+
+        # If any scoring plays were unaccounted for, add them to the drive here
+        if len(undetected_plays) > 0:
+            for play in undetected_plays:
+                # find the play that comes right before the undetected play
+                max_play_id = max([x[1].play_id for x in detected_plays if x[1].play_id < play.play_id])
+                # get drive that includes that play
+                max_drive_id = [x[0] for x in detected_plays if x[1].play_id == max_play_id][0]
+                # add scoring play to the end of that drive
+                self.drives[max_drive_id - 1].plays.append(play)
+                # recalculate drive's points
+                self.drives[max_drive_id - 1].calculate_scoring()
+
     # given the game id, get boxscorePbP XML and populate Drives objects and all other Game fields
     def get_game_details(self):
         # Build URL, get XML, convert to dict, get out and store easy values
@@ -116,37 +170,23 @@ class Game:
         self.away_score = game_dict['score']['visitorTeamScore']['@pointTotal']
 
         # Extract the 'drives'/'drive' dict and all data from within it
-        drives_dict = game_dict['drives']['drive']
-        drives_list = [Drive(int(float(x['@sequence'])),  # Python has some dumb bugs man
-                             x['@startTime'],
-                             x['@endTime'],
-                             [Play(int(y.get('@playId', None)),
-                                   y.get('@teamId', None),
-                                   y.get('playDescription', None),
-                                   Yardline(y.get('@yardlineSide'),
-                                            y.get('@yardlineNumber'),
-                                            (-1 if y['@teamId'] == y['@yardlineSide'] else 1) * (
-                                                        50 - int(y['@yardlineNumber'])))
-                                   if y.get('@yardlineSide') else None,
-                                   y.get('@scoringType', None),
-                                   y.get('@scoringTeamId', None))
-                              for y in x['plays'].get('play')],
-                             x['@possessionTeamAbbr']) for x in drives_dict]
+        self.drives = _get_drive_details(game_dict)
+        # Check to see if plays/drives score matches game final score. If not, fix.
+        if not self.check_score_integrity():
+            self._remedy_incorrect_scoreline(full_dict=game_dict)
+            print(self.check_score_integrity())
 
-        # fixme need to add drives/plays PATs after int/fumble returned for TD - they're on scoringplays at the top but not always in the data
-
-        self.drives = drives_list
-        self.check_score_integrity()
+        # Check to see if any duplicate plays
+        for drive in self.drives:
+            distinct_plays = set(x.play_id for x in drive.plays)
+            if len(distinct_plays) != len(drive.plays):
+                logger.warning('Duplicate play_ids found')
 
     # check to make sure that the number of points recorded within drives matches the top-level given result
     def check_score_integrity(self):
         drives_points = sum([x.points for y in self.drives for x in y.plays])
         game_points = int(self.home_score) + int(self.away_score)
-        if drives_points == game_points:
-            logger.debug('drives_points={}, game_points={}'.format(drives_points, game_points))
-        else:
-            logger.error('game_id={}, drives_points={}, game_points={}'
-                         .format(self.game_id, drives_points, game_points))
+        return drives_points == game_points
 
     # smart export - since I only need drive result, make this a drive-level line-output for file storage
     def export(self):
@@ -183,35 +223,20 @@ def get_games(game_year: int):
     return games_list
 
 
-# get all schedule files 2009+, put all games in one list
-games = []
-for year in range(2009, 2010):
-    games += get_games(year)
+bad_games = ['2016080751',  # preseason game that wasn't actually played
+             '2011120406'  # NO/DET game with a super-broken drive  # todo fix this drive/game
+             ]
+# get all schedule files 2009+, process games in each year separately
+for year in range(2009, 2019):
+    games = get_games(year)
 
-# using list of games, get game details and append full Game.export() dict to new list
-games_dicts = []
-for g in games[100:105]:
-    if g.season_type == 'REG':  # fixme There are some issues with POST - not willing to fix now
-        g.get_game_details()
-        logger.info(g)
-        games_dicts.append(g.export())
-
-# set up arrow types
-
-fields = ['game_id', 'season_year', 'season_type', 'game_week', 'home_team', 'away_team']
-table_data = [pa.column(field, pa.array(x[field] for x in games_dicts)) for field in fields]
-
-drive_fields = pa.struct([('drive_id', pa.int16()),
-                ('drive_num_plays', pa.int16()),
-                ('drive_points', pa.int16()),
-                ('drive_pos_team', pa.string()),
-                ('drive_scoring_team', pa.string()),
-                ('drive_start', pa.int16())])
-drives_data = []
-for game in games_dicts:
-    drive_data = [pa.column(field.name, pa.array(x[field.name] for x in game['drives'])) for field in drive_fields]
-    drives_data.append(drive_data)
-# table_data.append(pa.column('drives', drives_data))
-games_table = pa.Table.from_arrays(table_data)
-pq.write_table(games_table, 'pqtest.pq')
-print(games_table)
+    # using list of games, get game details and append full Game.export() dict to new list
+    games_dicts = []
+    for g in games:
+        if g.season_type != 'PRO' and g.game_id not in bad_games:  # exclude pro bowl and bad games
+            g.get_game_details()
+            logger.info(g)
+            games_dicts.append(g.export())
+    drives_df = pd.DataFrame(games_dicts)
+    drives_df.to_json('drives_{year}.json'.format(year=str(year)), orient='records', lines=True)
+    print(drives_df.head())
