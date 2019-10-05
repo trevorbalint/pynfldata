@@ -13,8 +13,8 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
-TEAMS_FILENAME = 'teams.csv'
-COACHES_FILENAME = 'coaches.csv'
+TEAMS_FILENAME = 'output/teams.csv'
+COACHES_FILENAME = 'output/coaches.csv'
 
 
 # fetch the list of teams for a given year

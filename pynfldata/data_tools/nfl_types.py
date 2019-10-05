@@ -79,6 +79,19 @@ class Drive:
             self.scoring_team = scoring_team_list[0]
 
 
+def _process_play_dict(play: dict):  # DRY
+    return Play(int(play.get('@playId', None)),
+                play.get('@teamId', None),
+                play.get('playDescription', None),
+                Yardline(play.get('@yardlineSide'),
+                         play.get('@yardlineNumber'),
+                         (-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
+                                 50 - int(play['@yardlineNumber'])))
+                if play.get('@yardlineSide') else None,
+                play.get('@playType', None),
+                play.get('@scoringType', None),
+                play.get('@scoringTeamId', None))
+
 # class to hold Game data. Has some fields meant to be input on init (from the NFL schedule XML)
 # and some fields added later (from boxscorePbP XML)
 @dataclass
@@ -102,18 +115,6 @@ class Game:
         return str_rep
 
     # Processes a "play" dict into a Play object
-    def _process_play_dict(self, play: dict):  # DRY
-        return Play(int(play.get('@playId', None)),
-                    play.get('@teamId', None),
-                    play.get('playDescription', None),
-                    Yardline(play.get('@yardlineSide'),
-                             play.get('@yardlineNumber'),
-                             (-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
-                                     50 - int(play['@yardlineNumber'])))
-                    if play.get('@yardlineSide') else None,
-                    play.get('@playType', None),
-                    play.get('@scoringType', None),
-                    play.get('@scoringTeamId', None))
 
     # The NFL data doesn't include conversion attempts after a fumble/pick-six
     def _remedy_incorrect_scoreline(self, full_dict):
@@ -121,7 +122,7 @@ class Game:
         detected_plays = [(x.drive_id, y) for x in self.drives for y in x.plays]
 
         # The NFL JSON does include a full list of scoring plays separate from the drives object - get all plays here
-        scoring_plays = [self._process_play_dict(x) for x in full_dict['scoringPlays']['play']]
+        scoring_plays = [_process_play_dict(x) for x in full_dict['scoringPlays']['play']]
         [x.calculate_points() for x in scoring_plays]
 
         # Get any scoring plays not found in Drives
@@ -145,7 +146,7 @@ class Game:
         drives_list = [Drive(int(float(x['@sequence'])),  # Python has some dumb bugs man
                              x['@startTime'],
                              x['@endTime'],
-                             [self._process_play_dict(y) for y in x['plays'].get('play')],
+                             [_process_play_dict(y) for y in x['plays'].get('play')],
                              x['@possessionTeamAbbr']) for x in drives_dict]
 
         self.drives = drives_list

@@ -34,5 +34,5 @@ for year in range(2009, 2019):
             logger.info(g)
             games_dicts.append(g.export())
     drives_df = pd.DataFrame(games_dicts)
-    drives_df.to_json('drives_{year}.json'.format(year=str(year)), orient='records', lines=True)
+    drives_df.to_json('output/drives_{year}.json'.format(year=str(year)), orient='records', lines=True)
     print(drives_df.head())

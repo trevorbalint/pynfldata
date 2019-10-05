@@ -1,2 +1,2 @@
-import pynfldata.nfl_data_parser.functions
-import pynfldata.nfl_data_parser.nfl_types
+import pynfldata.data_tools.functions
+import pynfldata.data_tools.nfl_types
