@@ -55,7 +55,7 @@ class Drive:
 
     # After being initialized, calculate points for all plays then the drive, then calculate the drive start
     def __post_init__(self):
-        [x.calculate_points() for x in self.plays]  # todo change to map
+        [x.calculate_points() for x in self.plays]
         self.calculate_scoring()
         self.drive_start = self.calculate_drive_start(self.plays)
 
@@ -126,7 +126,7 @@ class Game:
 
         # The NFL JSON does include a full list of scoring plays separate from the drives object - get all plays here
         scoring_plays = [_process_play_dict(x) for x in full_dict['scoringPlays']['play']]
-        [x.calculate_points() for x in scoring_plays]  # todo change to map
+        [x.calculate_points() for x in scoring_plays]
 
         # Get any scoring plays not found in Drives
         undetected_plays = [x for x in scoring_plays if x not in [y[1] for y in detected_plays]]
