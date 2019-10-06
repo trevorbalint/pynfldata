@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 import dataclasses as dc
-import xmltodict
 from pynfldata.data_tools import functions as f
 import logging
 
@@ -12,6 +11,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+# todo add class for clock/time that includes quarter
 
 # class to contain yardline data. It comes to us as "TEAM yardline" like SEA 25, so include int (-50:50)
 @dataclass
@@ -35,6 +35,7 @@ class Play:
     scoring_team_abbr: str = None
     points: int = 0
 
+    # Given a scoring play, calculate points using the above dictionary
     def calculate_points(self):
         if self.scoring_type is not None:
             self.points = __scoring_dict__.get(self.scoring_type)
@@ -52,13 +53,15 @@ class Drive:
     scoring_team: str = dc.field(default=None, init=False)
     points: int = dc.field(default=None, init=False)
 
+    # After being initialized, calculate points for all plays then the drive, then calculate the drive start
     def __post_init__(self):
-        [x.calculate_points() for x in self.plays]
+        [x.calculate_points() for x in self.plays]  # todo change to map
         self.calculate_scoring()
         self.drive_start = self.calculate_drive_start(self.plays)
 
     # Function to calculate the starting yardline of a drive given the drive's plays
-    # Complicated as some drives' first play has no yardline, hence the recursion
+    # Complicated as some drives' first play has no yardline or is a kickoff, hence the recursion
+    # todo use this to also calculate drive start and end time
     def calculate_drive_start(self, plays_list):
         if len(plays_list) == 1:  # occurs when a game ends concurrent with a turnover/change of posession/kickoff
             return Yardline(None, None, None)
@@ -70,6 +73,7 @@ class Drive:
             logger.debug("Drive's first play has no yardline: {}".format(plays_list[0]))
             return self.calculate_drive_start(plays_list[1:])
 
+    # Given the drive's plays, calculate drive's score and ensure only one team scored
     def calculate_scoring(self):
         if any([x.points for x in self.plays]):
             self.points = sum([x.points for x in self.plays])
@@ -79,6 +83,7 @@ class Drive:
             self.scoring_team = scoring_team_list[0]
 
 
+# Return a Play object, given a play dictionary
 def _process_play_dict(play: dict):  # DRY
     return Play(int(play.get('@playId', None)),
                 play.get('@teamId', None),
@@ -114,8 +119,6 @@ class Game:
                     away_score=self.away_score, home_score=self.home_score)
         return str_rep
 
-    # Processes a "play" dict into a Play object
-
     # The NFL data doesn't include conversion attempts after a fumble/pick-six
     def _remedy_incorrect_scoreline(self, full_dict):
         # To remedy this, first get a list of all detected plays in all drives
@@ -123,7 +126,7 @@ class Game:
 
         # The NFL JSON does include a full list of scoring plays separate from the drives object - get all plays here
         scoring_plays = [_process_play_dict(x) for x in full_dict['scoringPlays']['play']]
-        [x.calculate_points() for x in scoring_plays]
+        [x.calculate_points() for x in scoring_plays]  # todo change to map
 
         # Get any scoring plays not found in Drives
         undetected_plays = [x for x in scoring_plays if x not in [y[1] for y in detected_plays]]
@@ -165,7 +168,8 @@ class Game:
         # Check to see if plays/drives score matches game final score. If not, fix.
         if not self.check_score_integrity():
             self._remedy_incorrect_scoreline(full_dict=game_dict)
-            print(self.check_score_integrity())
+            if not self.check_score_integrity():
+                logger.warning('Game has incorrect scoreline!: {}'.format(self))
 
         # Check to see if any duplicate plays
         for drive in self.drives:

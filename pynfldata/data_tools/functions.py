@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 
 
-# helper function to get the xml and ensure that status 200 is returned
+# function to get the xml and ensure that status 200 is returned
 def download_xml(path: str, timeout_secs: int = 2):
     http = urllib3.PoolManager()
     r = http.request('GET', path)
@@ -16,6 +16,8 @@ def download_xml(path: str, timeout_secs: int = 2):
     return r.data
 
 
+# function to get data for other scripts
+# Gets the requested data from local if possible, downloads as xml and saves it as json if not
 def get_data(path: str, timeout_secs: int = 2, xml_args: dict = dict):
     # gets the type of data requested, coaches, teams, boxscorepbp, etc, and the rest of the path
     short_path = path.split('feeds-rs/')[1].split('/')
@@ -56,4 +58,3 @@ def get_games(game_year: int):
                        x['@gameId']) for x in game_dict]
 
     return games_list
-
