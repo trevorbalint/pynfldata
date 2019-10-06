@@ -30,7 +30,6 @@ def get_data(path: str, timeout_secs: int = 2, xml_args: dict = dict):
 
     # build a Path object and check if it's a file. if it is, use it. If not, download and convert the xml.
     filename = Path('{}//{}'.format(folder, file_path))
-    print(filename)
     if filename.is_file():
         with open(filename, 'r') as infile:
             json_data = json.load(infile)

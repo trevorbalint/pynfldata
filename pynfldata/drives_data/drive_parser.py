@@ -9,6 +9,7 @@ Will likely be useful but need to be refactored later when I need to get more da
 import logging
 from pynfldata.data_tools import functions as f
 import pandas as pd
+import os
 
 # setup logging
 logger = logging.getLogger('drive_parser.py')
@@ -34,5 +35,10 @@ for year in range(2009, 2019):
             logger.info(g)
             games_dicts.append(g.export())
     drives_df = pd.DataFrame(games_dicts)
+
+    # if the folder doesn't exist, create it
+    if not os.path.exists('output'):
+        os.makedirs('output')
+
     drives_df.to_json('output/drives_{year}.json'.format(year=str(year)), orient='records', lines=True)
     print(drives_df.head())

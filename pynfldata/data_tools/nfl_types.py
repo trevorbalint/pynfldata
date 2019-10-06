@@ -156,7 +156,7 @@ class Game:
         # Build URL, get XML, convert to dict, get out and store easy values
         game_url = "http://www.nfl.com/feeds-rs/boxscorePbp/{}.xml".format(self.game_id)
         logger.debug('Getting game details {}'.format(game_url))
-        game_dict = f.get_data(game_url, 1, {'force_list': {'play': True}})['boxScorePBPFeed']
+        game_dict = f.get_data(game_url, 2, {'force_list': {'play': True}})['boxScorePBPFeed']
         self.home_score = game_dict['score']['homeTeamScore']['@pointTotal']
         self.away_score = game_dict['score']['visitorTeamScore']['@pointTotal']
 
