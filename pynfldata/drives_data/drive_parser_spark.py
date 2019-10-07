@@ -1,18 +1,21 @@
 """File to get raw data from nfl.com and process drives out of it.
 Will likely be useful but need to be refactored later when I need to get more data than just drive outcomes
-
-3-Oct-2019: Fixed issue with drive start position. Added "bad" games that are unprocessable. Removed arrow.
-    Added Game helper functions. Refactored dataclasses out of this module.
-4-Sep-2019: Mostly functional. A few small bugs that are noted, but most data is in and correct.
 """
 # todo better documentation
 import logging
 from pynfldata.data_tools import functions as f
 import pandas as pd
 import os
+from pyspark import SparkContext, SparkConf
+from pyspark.sql import SparkSession, SQLContext
+
+conf = SparkConf().setAppName('Drive Parser').setMaster('local[4]')
+sc = SparkContext(conf=conf)
+spark = SparkSession.builder.master("local").appName("Drive Parser").getOrCreate()
+sqlContext = SQLContext(sc)
 
 # setup logging
-logger = logging.getLogger('drive_parser.py')
+logger = logging.getLogger('drive_parser_spark.py')
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
 handler.setFormatter(formatter)
@@ -25,19 +28,17 @@ bad_games = ['2016080751',  # preseason game that wasn't actually played
              ]
 
 
+# Still slower than the non-spark version
 def build_and_save_json():
     # get all schedule files 2009+, process games in each year separately
     for year in range(2009, 2019):
         games = f.get_games(year)
 
-        # using list of games, get game details and append full Game.export() dict to new list
-        games_dicts = []
-        for g in games:
-            if g.season_type != 'PRO' and g.game_id not in bad_games:  # exclude pro bowl and bad games
-                g.get_game_details()
-                # logger.info(g)
-                games_dicts.append(g.export())
-        drives_df = pd.DataFrame(games_dicts)
+        games_par = sc.parallelize(games, 16)
+        games_par = games_par.filter(lambda x: x.season_type != 'PRO' and x.game_id not in bad_games)
+        games_dicts = games_par.map(lambda x: x.get_game_details()).map(lambda x: x.export())
+
+        drives_df = pd.DataFrame(games_dicts.collect())
 
         # if the folder doesn't exist, create it
         if not os.path.exists('output'):

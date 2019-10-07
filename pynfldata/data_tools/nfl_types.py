@@ -177,6 +177,8 @@ class Game:
             if len(distinct_plays) != len(drive.plays):
                 logger.warning('Duplicate play_ids found')
 
+        return self
+
     # check to make sure that the number of points recorded within drives matches the top-level given result
     def check_score_integrity(self):
         drives_points = sum([x.points for y in self.drives for x in y.plays])
