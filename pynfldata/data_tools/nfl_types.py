@@ -16,9 +16,16 @@ logger.setLevel(logging.INFO)
 # class to contain yardline data. It comes to us as "TEAM yardline" like SEA 25, so include int (-50:50)
 @dataclass
 class Yardline:
-    side: str
-    side_pos: int
     yard_int: int
+    side: str = dc.field(default=None, init=False)
+    side_pos: int = dc.field(default=None, init=False)
+
+    def __post_init__(self):
+        self.side = 'OWN' if self.yard_int <= 0 else 'OPP'
+        self.side_pos = 50 + self.yard_int if self.yard_int <= 0 else 50 - self.yard_int
+
+    def __repr__(self):
+        return '{} {}'.format(self.side, str(self.side_pos))
 
 
 __scoring_dict__ = {'TD': 6, 'FG': 3, 'PAT': 1, 'PAT2': 2, 'SFTY': 2}
@@ -88,9 +95,7 @@ def _process_play_dict(play: dict):  # DRY
     return Play(int(play.get('@playId', None)),
                 play.get('@teamId', None),
                 play.get('playDescription', None),
-                Yardline(play.get('@yardlineSide'),
-                         play.get('@yardlineNumber'),
-                         (-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
+                Yardline((-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
                                  50 - int(play['@yardlineNumber'])))
                 if play.get('@yardlineSide') else None,
                 play.get('@playType', None),
