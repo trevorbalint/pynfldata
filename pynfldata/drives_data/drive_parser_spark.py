@@ -48,4 +48,11 @@ def build_and_save_json():
         logger.info('Completed processing JSON for {}'.format(str(year)))
 
 
+def convert_json_to_pq():
+    json_df = sqlContext.read.json(['output/drives_{}.json'.format(str(x)) for x in range(2009, 2019)])
+    print(json_df.head(5))
+    json_df.write.parquet('output/drives.pq')
+
+
 build_and_save_json()
+convert_json_to_pq()
