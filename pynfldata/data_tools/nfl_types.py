@@ -25,7 +25,10 @@ class Yardline:
         self.side_pos = 50 + self.yard_int if self.yard_int <= 0 else 50 - self.yard_int
 
     def __repr__(self):
-        return '{} {}'.format(self.side, str(self.side_pos))
+        if self.yard_int == 0:
+            return 'MIDFIELD'
+        else:
+            return '{} {}'.format(self.side, str(self.side_pos))
 
 
 __scoring_dict__ = {'TD': 6, 'FG': 3, 'PAT': 1, 'PAT2': 2, 'SFTY': 2}
