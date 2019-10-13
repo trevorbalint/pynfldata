@@ -21,8 +21,15 @@ class Yardline:
     side_pos: int = dc.field(default=None, init=False)
 
     def __post_init__(self):
-        self.side = 'OWN' if self.yard_int <= 0 else 'OPP'
-        self.side_pos = 50 + self.yard_int if self.yard_int <= 0 else 50 - self.yard_int
+        if self.yard_int is None:
+            self.side = None
+            self.side_pos = None
+        elif self.yard_int == 0:
+            self.side = 'OWN'
+            self.side_pos = 50
+        else:
+            self.side = 'OWN' if self.yard_int <= 0 else 'OPP'
+            self.side_pos = 50 + self.yard_int if self.yard_int <= 0 else 50 - self.yard_int
 
     def __repr__(self):
         if self.yard_int == 0:
@@ -32,6 +39,7 @@ class Yardline:
 
 
 __scoring_dict__ = {'TD': 6, 'FG': 3, 'PAT': 1, 'PAT2': 2, 'SFTY': 2}
+__fake_plays__ = ['TIMEOUT', 'END_QUARTER', 'END_HALF', 'END_GAME', 'COMMENT']
 
 # class to contain Play data, uses above dict to calculate points
 @dataclass
@@ -41,6 +49,7 @@ class Play:
     description: str
     yardline: Yardline
     play_type: str
+    real_play: bool  # False if it's a end of quarter, timeout, etc
     scoring_type: str = None
     scoring_team_abbr: str = None
     points: int = 0
@@ -73,8 +82,8 @@ class Drive:
     # Complicated as some drives' first play has no yardline or is a kickoff, hence the recursion
     # todo use this to also calculate drive start and end time
     def calculate_drive_start(self, plays_list):
-        if len(plays_list) == 1:  # occurs when a game ends concurrent with a turnover/change of posession/kickoff
-            return Yardline(None, None, None)
+        if len(plays_list) == 1 and plays_list[0].play_type == 'KICK_OFF':
+            return Yardline(None)
         elif plays_list[0].play_type == 'KICK_OFF':  # drives after a score have play 1 being a kickoff - discard
             return self.calculate_drive_start(plays_list[1:])
         elif plays_list[0].yardline is not None:
@@ -92,16 +101,44 @@ class Drive:
                 logger.warning("Different teams are listed as scoring in this drive! {}".format(scoring_team_list))
             self.scoring_team = scoring_team_list[0]
 
+    # For some stupid reason, newly-downloaded files have some issues with team names being post-change ones
+    # This should fix that
+    def correct_drive_team(self, season_year):
+        if self.pos_team == 'JAX' and season_year < 2013:
+            self.pos_team = 'JAC'
+        if self.scoring_team == 'JAX' and season_year < 2013:
+            self.scoring_team = 'JAC'
+
+        if self.pos_team == 'LAC' and season_year <= 2017:
+            self.pos_team = 'SD'
+        if self.scoring_team == 'LAC' and season_year <= 2017:
+            self.scoring_team = 'SD'
+
+        if self.pos_team == 'LA' and season_year <= 2016:
+            self.pos_team = 'STL'
+        if self.scoring_team == 'LA' and season_year <= 2016:
+            self.scoring_team = 'STL'
+
 
 # Return a Play object, given a play dictionary
 def _process_play_dict(play: dict):  # DRY
+    # calculate Yardline - there are issues with midfield so do this separately
+    if play.get('@playType') in __fake_plays__:
+        yardline = Yardline(None)
+    elif play.get('@yardlineNumber', None) == '50':
+        yardline = Yardline(0)
+    elif play.get('@yardlineSide', None) is not None:
+        yardline = Yardline((-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
+                                 50 - int(play['@yardlineNumber'])))
+    else:
+        yardline = Yardline(None)
+
     return Play(int(play.get('@playId', None)),
                 play.get('@teamId', None),
                 play.get('playDescription', None),
-                Yardline((-1 if play['@teamId'] == play['@yardlineSide'] else 1) * (
-                                 50 - int(play['@yardlineNumber'])))
-                if play.get('@yardlineSide') else None,
+                yardline,
                 play.get('@playType', None),
+                play.get('@playType', '') in __fake_plays__,
                 play.get('@scoringType', None),
                 play.get('@scoringTeamId', None))
 
@@ -159,6 +196,9 @@ class Game:
                              x['@endTime'],
                              [_process_play_dict(y) for y in x['plays'].get('play')],
                              x['@possessionTeamAbbr']) for x in drives_dict]
+
+        for drive in drives_list:
+            drive.correct_drive_team(self.season_year)
 
         self.drives = drives_list
 

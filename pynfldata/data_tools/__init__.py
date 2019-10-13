@@ -1,2 +1,3 @@
 import pynfldata.data_tools.functions
 import pynfldata.data_tools.nfl_types
+import pynfldata.data_tools.team_functions
