@@ -54,5 +54,5 @@ def convert_json_to_pq():
     json_df.write.parquet('output/drives.pq')
 
 
-build_and_save_json()
+# build_and_save_json()
 convert_json_to_pq()

@@ -11,7 +11,14 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-# todo add class for clock/time that includes quarter
+
+@dataclass
+class Clock:
+    quarter: int
+    quarter_clock: str
+
+    def __repr__(self):
+        return 'Q{} {}'.format(str(self.quarter), self.quarter_clock)
 
 # class to contain yardline data. It comes to us as "TEAM yardline" like SEA 25, so include int (-50:50)
 @dataclass
@@ -48,6 +55,7 @@ class Play:
     pos_team: str
     description: str
     yardline: Yardline
+    play_time: Clock
     play_type: str
     real_play: bool  # False if it's a end of quarter, timeout, etc
     scoring_type: str = None
@@ -64,11 +72,10 @@ class Play:
 @dataclass
 class Drive:
     drive_id: int
-    start_time: str
-    end_time: str
     plays: list
     pos_team: str
     drive_start: Yardline = dc.field(default=None, init=False)
+    start_time: Clock = dc.field(default=None, init=False)
     scoring_team: str = dc.field(default=None, init=False)
     points: int = dc.field(default=None, init=False)
 
@@ -76,18 +83,17 @@ class Drive:
     def __post_init__(self):
         [x.calculate_points() for x in self.plays]
         self.calculate_scoring()
-        self.drive_start = self.calculate_drive_start(self.plays)
+        self.drive_start, self.start_time = self.calculate_drive_start(self.plays)
 
     # Function to calculate the starting yardline of a drive given the drive's plays
     # Complicated as some drives' first play has no yardline or is a kickoff, hence the recursion
-    # todo use this to also calculate drive start and end time
     def calculate_drive_start(self, plays_list):
         if len(plays_list) == 1 and plays_list[0].play_type == 'KICK_OFF':
-            return Yardline(None)
+            return Yardline(None), Clock(None, None)
         elif plays_list[0].play_type == 'KICK_OFF':  # drives after a score have play 1 being a kickoff - discard
             return self.calculate_drive_start(plays_list[1:])
         elif plays_list[0].yardline is not None:
-            return plays_list[0].yardline
+            return plays_list[0].yardline, plays_list[0].play_time
         else:
             logger.debug("Drive's first play has no yardline: {}".format(plays_list[0]))
             return self.calculate_drive_start(plays_list[1:])
@@ -137,8 +143,9 @@ def _process_play_dict(play: dict):  # DRY
                 play.get('@teamId', None),
                 play.get('playDescription', None),
                 yardline,
+                Clock(play.get('@quarter', None), play.get('@time', None)),
                 play.get('@playType', None),
-                play.get('@playType', '') in __fake_plays__,
+                play.get('@playType', '') not in __fake_plays__,
                 play.get('@scoringType', None),
                 play.get('@scoringTeamId', None))
 
@@ -192,8 +199,6 @@ class Game:
         drives_dict = full_dict['drives']['drive']
 
         drives_list = [Drive(int(float(x['@sequence'])),  # Python has some dumb bugs man
-                             x['@startTime'],
-                             x['@endTime'],
                              [_process_play_dict(y) for y in x['plays'].get('play')],
                              x['@possessionTeamAbbr']) for x in drives_dict]
 
@@ -244,7 +249,8 @@ class Game:
                      'drives': [{'drive_id': drive.drive_id,
                                  'drive_pos_team': drive.pos_team,
                                  'drive_start': drive.drive_start.yard_int,
-                                 'drive_num_plays': len(drive.plays),
+                                 'drive_start_time': str(drive.start_time),
+                                 'drive_num_plays': sum([1 for x in drive.plays if x.real_play]),
                                  'drive_scoring_team': drive.scoring_team,
                                  'drive_points': drive.points} for drive in self.drives]
                      }
