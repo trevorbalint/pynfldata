@@ -9,7 +9,7 @@ handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 @dataclass
@@ -90,7 +90,7 @@ class Drive:
     def calculate_drive_start(self, plays_list):
         if len(plays_list) == 1 and plays_list[0].play_type == 'KICK_OFF':
             return Yardline(None), Clock(None, None)
-        elif plays_list[0].play_type == 'KICK_OFF':  # drives after a score have play 1 being a kickoff - discard
+        elif plays_list[0].play_type in __fake_plays__:  # drives after a score have play 1 being a kickoff - discard
             return self.calculate_drive_start(plays_list[1:])
         elif plays_list[0].yardline is not None:
             return plays_list[0].yardline, plays_list[0].play_time
@@ -211,7 +211,7 @@ class Game:
     def get_game_details(self):
         # Build URL, get XML, convert to dict, get out and store easy values
         game_url = "http://www.nfl.com/feeds-rs/boxscorePbp/{}.xml".format(self.game_id)
-        logger.debug('Getting game details {}'.format(game_url))
+        logger.log(5, 'Getting game details {}'.format(game_url))
         game_dict = f.get_data(game_url, 2, {'force_list': {'play': True}})['boxScorePBPFeed']
         self.home_score = game_dict['score']['homeTeamScore']['@pointTotal']
         self.away_score = game_dict['score']['visitorTeamScore']['@pointTotal']
