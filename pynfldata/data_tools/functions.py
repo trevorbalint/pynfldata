@@ -1,3 +1,6 @@
+"""General functions usable by any script
+
+"""
 import urllib3
 import time
 import xmltodict
@@ -5,6 +8,11 @@ from pynfldata.data_tools.nfl_types import Game
 import json
 from pathlib import Path
 import os
+
+
+bad_games = ['2016080751',  # preseason game that wasn't actually played
+             '2011120406'  # NO/DET game with a super-broken drive  # todo fix this drive/game
+             ]
 
 
 # function to get the xml and ensure that status 200 is returned
@@ -44,7 +52,7 @@ def get_data(path: str, timeout_secs: int = 2, xml_args: dict = dict):
 
 
 # function to get all games from a schedule file and build Game objects
-def get_games(game_year: int):
+def get_games_from_schedule(game_year: int):
     schedule_url = "http://www.nfl.com/feeds-rs/schedules/{}".format(game_year)
     xml_string = download_xml(schedule_url)
 
@@ -56,5 +64,19 @@ def get_games(game_year: int):
                        x['@homeTeamAbbr'],
                        x['@visitorTeamAbbr'],
                        x['@gameId']) for x in game_dict]
+
+    return games_list
+
+
+def get_games_for_years(start_year: int, end_year: int):
+    games_list = []
+    for year in range(start_year, end_year):
+        games = get_games_from_schedule(year)
+
+        # using list of games, get game details and append full Game.export() dict to new list
+        for g in games:
+            if g.season_type != 'PRO' and g.game_id not in bad_games:  # exclude pro bowl and bad games
+                g.get_game_details()
+                games.append(g)
 
     return games_list

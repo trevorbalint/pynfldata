@@ -20,23 +20,15 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-bad_games = ['2016080751',  # preseason game that wasn't actually played
-             '2011120406'  # NO/DET game with a super-broken drive  # todo fix this drive/game
-             ]
-
-
 def build_and_save_json():
     # get all schedule files 2009+, process games in each year separately
     for year in range(2009, 2019):
-        games = f.get_games(year)
+        games = f.get_games_for_years(year, year+1)
 
-        # using list of games, get game details and append full Game.export() dict to new list
+        # using list of games, export game details and append to that year's list
         games_dicts = []
         for g in games:
-            if g.season_type != 'PRO' and g.game_id not in bad_games:  # exclude pro bowl and bad games
-                g.get_game_details()
-                # logger.info(g)
-                games_dicts.append(g.export())
+            games_dicts.append(g.export())
         drives_df = pd.DataFrame(games_dicts)
 
         # if the folder doesn't exist, create it

@@ -23,19 +23,14 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-bad_games = ['2016080751',  # preseason game that wasn't actually played
-             '2011120406'  # NO/DET game with a super-broken drive  # todo fix this drive/game
-             ]
-
-
 # Still slower than the non-spark version
 def build_and_save_json():
     # get all schedule files 2009+, process games in each year separately
     for year in range(2009, 2019):
-        games = f.get_games(year)
+        games = f.get_games_from_schedule(year)
 
         games_par = sc.parallelize(games, 16)
-        games_par = games_par.filter(lambda x: x.season_type != 'PRO' and x.game_id not in bad_games)
+        games_par = games_par.filter(lambda x: x.season_type != 'PRO' and x.game_id not in f.bad_games)
         games_dicts = games_par.map(lambda x: x.get_game_details()).map(lambda x: x.export())
 
         drives_df = pd.DataFrame(games_dicts.collect())
