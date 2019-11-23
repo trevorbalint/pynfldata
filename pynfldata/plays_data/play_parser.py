@@ -12,12 +12,12 @@ import pandas as pd
 import os
 
 # setup logging
-logger = logging.getLogger('drive_parser.py')
+logger = logging.getLogger('plays_parser.py')
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 def build_and_save_json():
@@ -35,7 +35,7 @@ def build_and_save_json():
         if not os.path.exists('output'):
             os.makedirs('output')
 
-        drives_df.to_json('output/drives_{year}.json'.format(year=str(year)), orient='records', lines=True)
+        drives_df.to_json('output/plays_{year}.json'.format(year=str(year)), orient='records', lines=True)
         logger.info('Completed processing JSON for {}'.format(str(year)))
 
 
