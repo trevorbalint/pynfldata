@@ -55,9 +55,13 @@ class Play:
     pos_team: str
     description: str
     yardline: Yardline
-    play_time: Clock
+    play_time: Clock  # fixme this is wrong in most JSONs, dunno how to deal with
     play_type: str
     real_play: bool  # False if it's a end of quarter, timeout, etc
+    down: int
+    yards_to_go: int
+    yards: int
+    penalty: bool
     scoring_type: str = None
     scoring_team_abbr: str = None
     points: int = 0
@@ -146,6 +150,10 @@ def _process_play_dict(play: dict):  # DRY
                 Clock(play.get('@quarter', None), play.get('@time', None)),
                 play.get('@playType', None),
                 play.get('@playType', '') not in __fake_plays__,
+                play.get('@down', None),
+                play.get('@yardsToGo', None),
+                play.get('@yards', None),
+                True if play.get('@penalty', None) == 'true' else False,
                 play.get('@scoringType', None),
                 play.get('@scoringTeamId', None))
 
@@ -246,12 +254,27 @@ class Game:
                      'game_week': self.game_week,
                      'home_team': self.home_team,
                      'away_team': self.away_team,
+                     'home_score': self.home_score,
+                     'away_score': self.away_score,
                      'drives': [{'drive_id': drive.drive_id,
                                  'drive_pos_team': drive.pos_team,
                                  'drive_start': drive.drive_start.yard_int,
                                  'drive_start_time': str(drive.start_time),
                                  'drive_num_plays': sum([1 for x in drive.plays if x.real_play]),
                                  'drive_scoring_team': drive.scoring_team,
-                                 'drive_points': drive.points} for drive in self.drives]
+                                 'drive_points': drive.points,
+                                 'plays': [{'play_id': play.play_id,
+                                            'yardline': play.yardline,
+                                            'down': play.down,
+                                            'yards_to_go': play.yards_to_go,
+                                            'yards': play.yards,
+                                            'penalty': play.penalty,
+                                            'play_type': play.play_type,
+                                            'real_play': play.real_play,
+                                            'points': play.points if play.points > 0 else None,
+                                            'scoring_team': play.scoring_team_abbr if play.points > 0 else None,
+                                            'description': play.description
+                                            } for play in drive.plays]
+                                 } for drive in self.drives]
                      }
         return game_data

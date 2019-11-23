@@ -77,6 +77,6 @@ def get_games_for_years(start_year: int, end_year: int):
         for g in games:
             if g.season_type != 'PRO' and g.game_id not in bad_games:  # exclude pro bowl and bad games
                 g.get_game_details()
-                games.append(g)
+                games_list.append(g)
 
     return games_list
