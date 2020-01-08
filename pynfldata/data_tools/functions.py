@@ -88,11 +88,11 @@ def get_games_from_schedule(game_year: int):
 
     # get the scores for each week, add to a list, then remove scheduled games that don't have a score
     # this occurs if a game is scheduled but hasn't happened yet
-    # todo filter to games whose state includes FINAL
     scores = []
     for week in game_weeks:
         scores += get_game_score(*week)
-    scores = [x for x in scores if x.get('score')]
+    scores = [x for x in scores if x.get('score')]  # Filter out games that don't have a score object - haven't happened
+    scores = [x for x in scores if 'FINAL' in x['score']['@phase']]  # Filter out games that aren't final
 
     # build Game objects using scores list
     games_list = []
