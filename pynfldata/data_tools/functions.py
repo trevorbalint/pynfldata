@@ -8,6 +8,7 @@ from pynfldata.data_tools.nfl_types import Game
 import json
 from pathlib import Path
 import os
+import datetime
 
 
 bad_games = ['2016080751',  # preseason game that wasn't actually played
@@ -51,23 +52,66 @@ def get_data(path: str, timeout_secs: int = 2, xml_args: dict = dict):
     return json_data
 
 
+# Takes a NFL date string "MM/DD/YYYY" and converts it to a datetime.date object
+def get_game_date(date_string: str):
+    date_list = list(map(lambda x: int(x), date_string.split('/')))
+    game_date = datetime.date(date_list[2], date_list[0], date_list[1])
+    return game_date
+
+
+# get full game information from the scores feeds-rs object. downloads week by week
+def get_game_score(season_year: int, season_type: str, week: int):
+    score_url = "http://www.nfl.com/feeds-rs/scores/{y}/{t}/{w}".format(y=season_year, t=season_type, w=week)
+    score_xml_string = download_xml(score_url, 1)
+
+    score_game_dict_raw = xmltodict.parse(score_xml_string)['scoresFeed']['gameScores']
+
+    # If there is only one element in the XML list, Python does wonky things. Force it to make a list in this case.
+    # this occurs if there is only one game in a week, like preseason week 0 or super bowl week
+    if 'gameSchedule' in score_game_dict_raw['gameScore']:
+        return [score_game_dict_raw['gameScore']]
+    else:
+        return score_game_dict_raw['gameScore']
+
+
 # function to get all games from a schedule file and build Game objects
 def get_games_from_schedule(game_year: int):
+    # get all games from the year's schedule file
     schedule_url = "http://www.nfl.com/feeds-rs/schedules/{}".format(game_year)
-    xml_string = download_xml(schedule_url)
+    schedule_xml_string = download_xml(schedule_url)
+    schedule_game_dict = xmltodict.parse(schedule_xml_string)['gameSchedulesFeed']['gameSchedules']['gameSchedule']
 
-    game_dict = xmltodict.parse(xml_string)['gameSchedulesFeed']['gameSchedules']['gameSchedule']
+    # build a tuple of year/type/week using every game in the schedule
+    game_weeks = set()
+    for game in schedule_game_dict:
+        game_weeks.add((int(game['@season']), game['@seasonType'], int(game['@week'])))
 
-    games_list = [Game(int(x['@season']),
-                       x['@seasonType'],
-                       int(x['@week']),
-                       x['@homeTeamAbbr'],
-                       x['@visitorTeamAbbr'],
-                       x['@gameId']) for x in game_dict]
+    # get the scores for each week, add to a list, then remove scheduled games that don't have a score
+    # this occurs if a game is scheduled but hasn't happened yet
+    # todo filter to games whose state includes FINAL
+    scores = []
+    for week in game_weeks:
+        scores += get_game_score(*week)
+    scores = [x for x in scores if x.get('score')]
+
+    # build Game objects using scores list
+    games_list = []
+    for game in scores:
+        score_dict = game.get('score')
+        schedule_dict = game.get('gameSchedule')
+        games_list.append(Game(int(schedule_dict['@season']),
+                               schedule_dict['@seasonType'],
+                               int(schedule_dict['@week']),
+                               schedule_dict['@homeTeamAbbr'],
+                               schedule_dict['@visitorTeamAbbr'],
+                               schedule_dict['@gameId'],
+                               score_dict['homeTeamScore']['@pointTotal'],
+                               score_dict['visitorTeamScore']['@pointTotal']))
 
     return games_list
 
 
+# given a year range, get Game objects and return in a list
 def get_games_for_years(start_year: int, end_year: int):
     games_list = []
     for year in range(start_year, end_year):
@@ -76,7 +120,10 @@ def get_games_for_years(start_year: int, end_year: int):
         # using list of games, get game details and append full Game.export() dict to new list
         for g in games:
             if g.season_type != 'PRO' and g.game_id not in bad_games:  # exclude pro bowl and bad games
-                g.get_game_details()
-                games_list.append(g)
+                try:
+                    g.get_game_details()
+                    games_list.append(g)
+                except KeyError:
+                    print('ERROR WITH GAME {}'.format(g.game_id))
 
     return games_list

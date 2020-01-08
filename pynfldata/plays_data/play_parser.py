@@ -22,13 +22,16 @@ logger.setLevel(logging.DEBUG)
 
 def build_and_save_json():
     # get all schedule files 2009+, process games in each year separately
-    for year in range(2009, 2019):
+    for year in range(2019, 2020):
         games = f.get_games_for_years(year, year+1)
 
         # using list of games, export game details and append to that year's list
         games_dicts = []
         for g in games:
-            games_dicts.append(g.export())
+            # Check if games have a Drives object - may not if game is scheduled and has not finished
+            # todo will be fixed by comment in functions.91
+            if g.is_valid():
+                games_dicts.append(g.export())
         drives_df = pd.DataFrame(games_dicts)
 
         # if the folder doesn't exist, create it
