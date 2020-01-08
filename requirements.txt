@@ -5,4 +5,3 @@ xmltodict
 pandas
 urllib3
 pyspark
-pyarrow

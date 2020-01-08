@@ -167,9 +167,9 @@ class Game:
     home_team: str
     away_team: str
     game_id: str
+    home_score: int
+    away_score: int
     drives: list = dc.field(default=None, init=False)
-    home_score: int = dc.field(default=None, init=False)
-    away_score: int = dc.field(default=None, init=False)
 
     def __repr__(self):
         str_rep = """{year}_{type}_{week}, id={game_id}\t{away} ({away_score}) vs. {home} ({home_score})"""\
@@ -221,8 +221,6 @@ class Game:
         game_url = "http://www.nfl.com/feeds-rs/boxscorePbp/{}.xml".format(self.game_id)
         logger.log(5, 'Getting game details {}'.format(game_url))
         game_dict = f.get_data(game_url, 2, {'force_list': {'play': True}})['boxScorePBPFeed']
-        self.home_score = game_dict['score']['homeTeamScore']['@pointTotal']
-        self.away_score = game_dict['score']['visitorTeamScore']['@pointTotal']
 
         # Extract the 'drives'/'drive' dict and all data from within it
         self._get_drive_details(game_dict)
@@ -245,6 +243,13 @@ class Game:
         drives_points = sum([x.points for y in self.drives for x in y.plays])
         game_points = int(self.home_score) + int(self.away_score)
         return drives_points == game_points
+
+    # check for validity - make sure the Drives field (and all other fields) are not None
+    def is_valid(self):
+        state = all([(field is not None) for field in dc.fields(self)])
+        if not state:
+            logger.warning('Game ID {} is not valid - at least one field is None'.format(self.game_id))
+        return state
 
     # smart export - since I only need drive result, make this a drive-level line-output for file storage
     def export(self):
