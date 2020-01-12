@@ -5,3 +5,4 @@ xmltodict
 pandas
 urllib3
 pyspark
+google-cloud-bigquery
