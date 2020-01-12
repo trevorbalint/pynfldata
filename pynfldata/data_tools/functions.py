@@ -25,6 +25,13 @@ def download_xml(path: str, timeout_secs: int = 2):
     return r.data
 
 
+def get_current_game_year():
+    url = "http://www.nfl.com/feeds-rs/schedules"
+    xml_string = download_xml(url, 1)
+    game_year = xmltodict.parse(xml_string)['gameSchedulesFeed']['season']
+    return game_year
+
+
 # function to get data for other scripts
 # Gets the requested data from local if possible, downloads as xml and saves it as json if not
 def get_data(path: str, timeout_secs: int = 2, xml_args: dict = dict):
