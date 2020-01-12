@@ -84,7 +84,7 @@ def get_game_score(season_year: int, season_type: str, week: int):
 # function to get all games from a schedule file and build Game objects
 def get_games_from_schedule(game_year: int):
     # get all games from the year's schedule file
-    schedule_url = "http://www.nfl.com/feeds-rs/schedules/{}".format(game_year)
+    schedule_url = "http://www.nfl.com/feeds-rs/schedules/{}".format(str(game_year))
     schedule_xml_string = download_xml(schedule_url)
     schedule_game_dict = xmltodict.parse(schedule_xml_string)['gameSchedulesFeed']['gameSchedules']['gameSchedule']
 
