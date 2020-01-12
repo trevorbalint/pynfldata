@@ -6,6 +6,7 @@ from pynfldata.data_tools import functions as f
 import pandas as pd
 from google.cloud import bigquery as bq
 import io
+import time
 
 # setup logging
 logger = logging.getLogger('plays_parser.py')
@@ -19,6 +20,7 @@ bq_client = bq.Client()
 
 
 def get_existing_games_from_bq(season_year: int):
+    logger.debug('Getting games from BQ for {}'.format(str(season_year)))
     query = """SELECT DISTINCT game_id 
                  FROM `pynfldata.drives.plays_nested_v1` 
                 WHERE season_year = {}""".format(season_year)
@@ -27,7 +29,7 @@ def get_existing_games_from_bq(season_year: int):
 
 
 def get_finished_games(season_year: int):
-    get_existing_games_from_bq(season_year)
+    logger.debug('Getting games from NFL feeds-rs for {}'.format(str(season_year)))
     games = f.get_games_for_years(season_year, season_year + 1)
     return games
 
@@ -53,11 +55,24 @@ def export_new_games_to_json():
 
 def upload_to_bq(json_str):
     load_config = bq.job.LoadJobConfig(write_disposition='WRITE_APPEND', source_format='NEWLINE_DELIMITED_JSON')
-    bq_client.load_table_from_file(json_str,
-                                   "pynfldata.drives.plays_nested_v1",
-                                   job_config=load_config)
+    load_job = bq_client.load_table_from_file(json_str,
+                                              "pynfldata.drives.plays_nested_v1",
+                                              job_config=load_config)
+    while load_job.running():
+        time.sleep(2)
+
+    return load_job
 
 
 json_string = export_new_games_to_json()
 if json_string:
-    upload_to_bq(io.StringIO(json_string))
+    logger.debug('Loading {} games to BQ'.format(str(len(json_string.split('\n')))))
+    job = upload_to_bq(io.StringIO(json_string))
+
+    if job.exception():
+        logger.warning('Exception in BQ job! {}'.format(job.exception()))
+
+    if job.done():
+        logger.info('Load to BQ complete')
+else:
+    logger.info('No games found to upload')
